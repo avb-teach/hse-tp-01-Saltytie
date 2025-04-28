@@ -1,75 +1,85 @@
 #!/bin/bash
 
-max_depth=""
-input_dir=""
-output_dir=""
+# collectfiles.sh
+# Скрипт копирует все файлы из входной директории и вложенных папок в выходную директорию без структуры папок
+# При совпадении имён файлов добавляет числовой суффикс
+# Опционально поддерживается параметр --maxdepth N (глубина обхода)
+#
+# Использование:
+# ./collectfiles.sh /path/to/inputdir /path/to/outputdir [--maxdepth N]
 
-if [ "$1" = "--max_depth" ]; then
-    if [ $# -ne 4 ]; then
-        echo "Использование: $0 [--max_depth N] ВХОДНАЯ_ДИРЕКТОРИЯ ВЫХОДНАЯ_ДИРЕКТОРИЯ"
-        exit 1
-    fi
-    max_depth="$2"
-    input_dir="$3"
-    output_dir="$4"
+set -e
+
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 inputdir outputdir --max_depth N"
+  exit 1
+fi
+
+INPUTDIR="$1"
+OUTPUTDIR="$2"
+shift 2
+
+MAXDEPTH=
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --maxdepth)
+       shift
+       MAXDEPTH="$1"
+       if ! [[ "$MAXDEPTH" =~ ^0-9+$ ]]; then
+          echo "Error: --maxdepth requires a positive integer"
+          exit 1
+       fi
+       shift
+       ;;
+    *)
+       echo "Unknown parameter: $1"
+       exit 1
+       ;;
+  esac
+done
+
+if [[ ! -d "$INPUTDIR" ]]; then
+  echo "Input directory does not exist: $INPUTDIR"
+  exit 1
+fi
+
+mkdir -p "$OUTPUTDIR"
+
+declare -A filecounts
+
+# Функция для копирования файла с суффиксом при совпадении имени
+copywithsuffix () {
+  local src="$1"
+  local base=$(basename "$src")
+  local name="${base%.*}"
+  local ext="${base##*.}"
+  if [[ "$ext" == "$base" ]]; then
+    ext=""
+  else
+    ext=".$ext"
+  fi
+
+  local dst="$OUTPUTDIR/$base"
+  local count=1
+
+  while [ -e "$dst" ]; do
+    count=$((count+1))
+    dst="$OUTPUTDIR/${name}${count}${ext}"
+  done
+
+  cp "$src" "$dst"
+}
+
+# Формируем команду find с учетом --maxdepth если указано
+if [ -z "$MAX_DEPTH" ]; then
+  findcmd=(find "$INPUTDIR" -type f)
 else
-    if [ $# -ne 2 ]; then
-        echo "Использование: $0 [--max_depth N] ВХОДНАЯ_ДИРЕКТОРИЯ ВЫХОДНАЯ_ДИРЕКТОРИЯ"
-        exit 1
-    fi
-    input_dir="$1"
-    output_dir="$2"
+  findcmd=(find "$INPUTDIR" -maxdepth "$MAXDEPTH" -type f)
 fi
 
+while IFS= read -r file; do
+  copywithsuffix "$file"
+done < <("${findcmd@}")
 
-if [ ! -d "$input_dir" ]; then
-    echo "Входная директория не существует: $input_dir"
-    exit 1
-fi
-
-mkdir -p "$output_dir"
-
-if [ -n "$max_depth" ]; then
-    if ! [[ "$max_depth" =~ ^[0-9]+$ ]]; then
-        echo "Ошибка: --max_depth должен быть положительным целым числом."
-        exit 1
-    fi
-    find_maxdepth=$((max_depth + 1))
-else
-    find_maxdepth=""
-fi
-
-while IFS= read -r -d '' src_path; do
-    filename=$(basename "$src_path")
-    name="${filename%.*}"
-    ext="${filename##*.}"
-
-  
-    if [ "$name" = "$filename" ]; then
-        ext=""
-    fi
-
-    dest_name="$filename"
-    counter=1
-
-   
-    while [ -e "$output_dir/$dest_name" ]; do
-        if [ -z "$ext" ]; then
-            dest_name="${name}_${counter}"
-        else
-            dest_name="${name}_${counter}.${ext}"
-        fi
-        counter=$((counter + 1))
-    done
-
-
-    cp "$src_path" "$output_dir/$dest_name"
-done < <(
-    if [ -n "$find_maxdepth" ]; then
-        find "$input_dir" -type f -maxdepth "$find_maxdepth" -print0
-    else
-        find "$input_dir" -type f -print0
-    fi
-)
-
-echo "Файлы успешно скопированы в $output_dir"
+exit 0
