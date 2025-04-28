@@ -1,5 +1,5 @@
 #!/bin/bash
-
+chmod +x collect_files.sh
 
 if [ $# -ne 2 ]; then
     echo "Использование: $0 ВХОДНАЯ_ДИРЕКТОРИЯ ВЫХОДНАЯ_ДИРЕКТОРИЯ"
